@@ -1,0 +1,50 @@
+# ra_analyze.py
+
+import numpy as np
+from scipy.stats import skew,kurtosis
+
+
+def ra_analyze(chunk):
+
+# check for correct input
+    shape = chunk.shape
+    if (shape[2] != 4):
+        print "Error, not the correct numnber of polarization dimensions"
+        return
+
+# form the various quantities we want to do statistics on
+
+    xi = chunk[:,:,0]  ; xq = chunk[:,:,1]  ; yi = chunk[:,:,2]   ; yq = chunk[:,:,3]
+    xx = xi*xi + xq*xq ; yy = yi*yi + yq*yq ; xyi = xi*yi + xq*yq ; xyq = xq*yi - xi*yq
+
+# and do the statistics - along the time (second) axis
+    xiMean = np.mean(xi,axis=1) ; xqMean = np.mean(xq,axis=1) ; yiMean   = np.mean(yi,axis=1)  ; yqMean  = np.mean(yq,axis=1)
+    xxMean = np.mean(xx,axis=1) ; yyMean = np.mean(yy,axis=1) ; xyiMean = np.mean(xyi,axis=1)  ; xyqMean = np.mean(xyq,axis=1)
+    xiRMS  = np.std(xi,axis=1)  ; xqRMS  = np.std(xq,axis=1)  ; yiRMS    = np.std(yi,axis=1)   ; yqRMS   = np.std(yq,axis=1)
+    xxRMS  = np.std(xx,axis=1)  ; yyRMS  = np.std(yy,axis=1)  ; xyiRMS   = np.std(xyi,axis=1)  ; xyqRMS  = np.std(xyq,axis=1)
+ 
+    return xxMean,xxRMS,yyMean,yyRMS
+    
+
+def main():
+    xxMean = []
+    xxRMS = []
+    yyMean = []
+    yyRMS = []
+    for i in range(3):
+        chunk = np.random.rand(512,512,4)
+        res = ra_analyze(chunk)
+        xxMean.append(res[0])
+        xxRMS.append(res[1])
+        yyMean.append(res[2])
+        yyRMS.append(res[3])
+
+    xxMeanWrite = np.vstack(xxMean)
+    xxRMSWrite  = np.vstack(xxRMS)
+    yyMeanWrite = np.vstack(yyMean)
+    yyRMSWrite  = np.vstack(yyRMS)
+    np.savez("temp.npz", xxMean=xxMeanWrite, xxRMS=xxRMSWrite, 
+                         yyMean=yyMeanWrite, yyRMS=yyRMSWrite)
+
+if __name__ == "__main__":
+    main()
