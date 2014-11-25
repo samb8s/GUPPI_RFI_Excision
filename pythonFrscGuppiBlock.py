@@ -8,6 +8,8 @@ from ra_analyze import *
 from copy import deepcopy 
 import numpy as np
 
+import robust_stats as rs
+
 def read_guppi_header(header):
 
     loc = header.find("BLOCSIZE")
@@ -104,6 +106,16 @@ def main(infile,outfile):
         chunk.shape = (obsnchan, -1)
         chunk = np.delete(chunk, np.s_[-npol*overlap::], 1)
         chunk.shape = (obsnchan,-1,npol)
+
+        #print chunk.shape
+        #sys.exit()
+        xi = chunk[:,:1024,0]; xq = chunk[:,:1024,1]
+        xx = xi.astype(float)*xi.astype(float) + xq.astype(float)*xq.astype(float)
+        #rs.plotData(xx)
+        #print chunk.mean(axis=1), chunk.mean(axis=2)
+        cleaned = rs.hampel_filter_2d(xx, 3.0)
+        #cleaned = rs.hampel_2d_fast(xx, 3.0)
+        #rs.plotData(cleaned)
 
         # now need to implement the hempel filter stuff on "chunk"
         
