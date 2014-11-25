@@ -6,8 +6,40 @@
 #include <string.h>
 /*----------------------------------------------------------------------------*/
 
-void hampel_filter_2d(float inbuffer[][nsamps], 
+void hampel_filter_2d(float *inbuffer, 
                       int nchans,
+                      int nsamps,
+                      float* outbuffer,
+                      float threshold, 
+                      int window_size_x,
+                      int window_size_y);
+void mad_replace(float* inbuffer,
+                 float *outbuffer,
+                 int xlen,
+                 int ylen,
+                 int imin, int imax, 
+                 int jmin, int jmax, 
+                 float median,
+                 float mad_scale_est);
+float mad_of_2d(float *inbuffer,
+                int len,
+                int imin,
+                int imax,
+                int jmin,
+                int jmax,
+                float median);
+float median_of_2d(float *inbuffer,
+                   int len,
+                   int imin,
+                   int imax,
+                   int jmin,
+                   int jmax);
+float median_of_1d(float* f_array,
+                   int len);
+
+void hampel_filter_2d(float *inbuffer, 
+                      int nchans,
+                      int nsamps,
                       float* outbuffer,
                       float threshold, 
                       int window_size_x,
@@ -16,7 +48,6 @@ void hampel_filter_2d(float inbuffer[][nsamps],
     int i_chan, j_samp, val;
     int i_min, i_max, j_min, j_max;
     float med, mad, mad_scale_est;
-    #pragma omp parallel for default(shared) private(jj,ii) shared(outbuffer,inbuffer)
 
     // loop over channels
     for (i_chan=0; i_chan < nchans; i_chan++){
@@ -48,15 +79,17 @@ void hampel_filter_2d(float inbuffer[][nsamps],
 
             
             // calculate median, MAD of the window region
-            med = median_of_2d(inbuffer, imin, imax, jmin, jmax);
-            mad = mad_of_2d(inbuffer, imin, imax, jmin, jmax, med);
+            med = median_of_2d(inbuffer, nsamps, i_min, i_max, j_min, j_max);
+            mad = mad_of_2d(inbuffer, nsamps, i_min, i_max, j_min, j_max, med);
             mad_scale_est = 1.4826 * mad * threshold;
 
             mad_replace(inbuffer,
                         outbuffer,
                         nsamps,
                         nchans,
-                        imin, imax, jmin, jmax, mad_scale_est);
+                        i_min, i_max, j_min, j_max, 
+                        med,
+                        mad_scale_est);
         }
     }
 }
@@ -85,12 +118,12 @@ void mad_replace(float* inbuffer,
             if (offset > mad_scale_est){
 
                 // replace with median
-                outbuffer[(xlen*ii) + jj] = median
+                outbuffer[(xlen*ii) + jj] = median;
             }
             else{
 
                 // keep the value
-                outbuffer[(xlen*ii) + jj] = inbuffer[(xlen*ii) + jj]
+                outbuffer[(xlen*ii) + jj] = inbuffer[(xlen*ii) + jj];
             }
 
         }
@@ -98,26 +131,27 @@ void mad_replace(float* inbuffer,
 
  }
 
-float mad_of_2d(float inbuffer[][len],
+float mad_of_2d(float *inbuffer,
+                int len,
                 int imin,
                 int imax,
                 int jmin,
                 int jmax,
                 float median){
 
-    float *f_array, temp, val, median;
+    float *f_array, temp, val;
     int ii, jj, irange, jrange, count=0, n;
 
     irange = imax - imin + 1;
     jrange = jmax - jmin + 1;
-    n = irange * jrange
+    n = irange * jrange;
     // allocate array of jrange*irange elements
     f_array = (float *) malloc(sizeof(float) * n);
 
     for (ii=imin; ii<=imax; ii++){
         for (jj=jmin; jj<=jmax; jj++){
             // get absolute deviation
-            val = fabsf(inbuffer[ii][jj] - median);
+            val = fabsf(inbuffer[len*jj + ii] - median);
             // store in f_array
             f_array[count] = val;
             count += 1;
@@ -132,25 +166,26 @@ float mad_of_2d(float inbuffer[][len],
     return median;
 }
 
-float median_of_2d(float inbuffer[][len],
+float median_of_2d(float *inbuffer,
+                   int len,
                    int imin,
                    int imax,
                    int jmin,
                    int jmax){
 
-    float median, *f_array, temp, median;
+    float median, *f_array, temp;
     int ii, jj, irange, jrange, count=0, n;
 
     irange = imax - imin + 1;
     jrange = jmax - jmin + 1;
-    n = irange * jrange
+    n = irange * jrange;
     // allocate array of jrange*irange elements
     f_array = (float *) malloc(sizeof(float) * n);
     
     for (ii=imin; ii<=imax; ii++){
         for (jj=jmin; jj<=jmax; jj++){
             // store the values into f_array
-            f_array[count] = inbuffer[ii][jj];
+            f_array[count] = inbuffer[len*jj + ii];
             count += 1;
         }
     }
@@ -176,7 +211,7 @@ float median_of_1d(float* f_array,
             if (f_array[jj] < f_array[ii]) {
     
                 // swap elements
-                temp = f_array[i];
+                temp = f_array[ii];
                 f_array[ii] = f_array[jj];
                 f_array[jj] = temp;
 
@@ -185,7 +220,7 @@ float median_of_1d(float* f_array,
     }
     
     // find median
-    if (n%2){
+    if (len%2){
         return f_array[len/2];
     } else {
         return ((f_array[len/2] + f_array[len/2 - 1]) / 2.0);

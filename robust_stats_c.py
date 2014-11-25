@@ -12,6 +12,7 @@ def hampel_filter_2d(array2d,
     outarray = np.empty(array2d.shape, dtype="float32")
 
     lib.hampel_filter_2d(as_c(array2d),
+                         C.c_int(array2d.shape[0])
                          C.c_int(array2d.shape[1]),
                          as_c(outarray),
                          C.C_float(threshold),
