@@ -58,8 +58,6 @@ void hampel_filter_2d(float inbuffer[][nsamps],
                         nchans,
                         imin, imax, jmin, jmax, mad_scale_est);
         }
-        
-        outbuffer[index+ii]+=inbuffer[(nchans*ii)+jj];
     }
 }
 

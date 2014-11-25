@@ -9,6 +9,64 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter
 
 # hampel filter stuff
+def hampel_2d_fast(array2d,
+                     threshold,
+                     window_size_x=16,
+                     window_size_y=16):
+
+    """
+    Time and frequency hampel filter, slide window in
+    time and frq directions and run the median cut
+    """
+
+    # copy of original to make changes to
+    #results_array = np.copy(array2d)
+    changes = np.zeros_like(array2d)
+    n_f_chans = array2d.shape[0]
+    n_t_samps = array2d.shape[1]
+
+    #f_array = np.arange(n_f_chans)
+    #t_array = np.arange(n_t_samps)
+    #ff, tt = np.meshgrid(f_array, t_array)
+
+    
+    #for i_chan, j_samp in zip(ff.ravel(), tt.ravel()):
+    for (i_chan, j_samp), val in np.ndenumerate(array2d):
+        i_min = i_chan - window_size_y
+        if i_min < 0:
+            i_min = 0
+        i_max = i_chan + window_size_y
+        if i_max >= n_f_chans:
+            i_max = n_f_chans-1
+
+        j_min = j_samp - window_size_x
+        if j_min < 0:
+            j_min = 0
+        j_max = j_samp + window_size_x
+        if j_max >= n_t_samps:
+            j_max = n_t_samps-1
+
+        window_1d = array2d[i_min:i_max+1,j_min:j_max+1].ravel()
+
+        # find median of all values
+        median, med_dev, mad = med_abs_dev(window_1d)
+        mad_scale_est = threshold * 1.4826 * mad
+        med_dev = med_dev.reshape(i_max - i_min + 1, -1)
+
+        # find values above mad_scale_est and
+        # write median fpr the window into "changes" at
+        # correct location
+        inds = np.where(med_dev>mad_scale_est)
+        # have to add i_min and j_min to account for
+        # position of the window inside array2d
+        changes[inds[0]+i_min, inds[1]+j_min] = median
+
+    # replacing values using a mask
+    mask = changes>0
+    array2d[mask] = changes[mask]
+
+    return array2d
+
 def hampel_filter_2d(array2d,
                      threshold,
                      window_size_x=16,
@@ -18,7 +76,58 @@ def hampel_filter_2d(array2d,
     Time and frequency hampel filter, slide window in
     time and frq directions and run the median cut
     """
-    pass
+
+    # changes array - I store median values for samples which need to be changed
+    # in here
+    changes = np.zeros_like(array2d)
+    n_f_chans = array2d.shape[0]
+    n_t_samps = array2d.shape[1]
+
+    count = 0
+    # loop over frequency channels
+    for i_chan in xrange(n_f_chans):
+        if count % 50 == 0:
+            print "starting freq loop = ", count
+        count += 1
+        i_min = i_chan - window_size_y
+        if i_min < 0:
+            i_min = 0
+        i_max = i_chan + window_size_y
+        if i_max >= n_f_chans:
+            i_max = n_f_chans-1
+
+        # now time samples
+        for j_samp in xrange(n_t_samps):
+
+            j_min = j_samp - window_size_x
+            if j_min < 0:
+                j_min = 0
+            j_max = j_samp + window_size_x
+            if j_max >= n_t_samps:
+                j_max = n_t_samps-1
+
+            window_1d = array2d[i_min:i_max+1,j_min:j_max+1].ravel()
+
+            # find median, median deviation, and MAD
+            # for all values in window
+            median, med_dev, mad = med_abs_dev(window_1d)
+            mad_scale_est = threshold * 1.4826 * mad
+            med_dev = med_dev.reshape(i_max - i_min + 1, -1)
+
+            # find values above mad_scale_est and
+            # write median fpr the window into "changes" at
+            # correct location
+            inds = np.where(med_dev>mad_scale_est)
+            # have to add i_min and j_min to account for
+            # position of the window inside array2d
+            changes[inds[0]+i_min, inds[1]+j_min] = median
+
+
+    # replacing values using a mask
+    mask = changes>0
+    array2d[mask] = changes[mask]
+
+    return array2d
 
 def hampel_filter_1d(array2d, threshold, window_size=16):
     """
@@ -55,7 +164,7 @@ def hampel_filter_1d(array2d, threshold, window_size=16):
         # apply mask
         in_window = array2d[index1 & index2].reshape(n_f_chans, -1)
         median_array = np.median(in_window, axis=1).reshape(n_f_chans, -1)
-        mad_array = np.array([med_abs_dev(row) for row in in_window])
+        mad_array = np.array([med_abs_dev_1(row) for row in in_window])
         mad_scale_est = threshold * 1.4826 * mad_array
 
         # median deviation
@@ -85,6 +194,15 @@ def form_index_array(array2d):
 
     return new_data.reshape(array2d.shape[0], -1)
 
+def form_freq_index_array(array2d):
+    new_data = np.array([])
+
+    time_series = np.arange(0, array2d.shape[0], dtype=int)
+    for i in xrange(array2d.shape[1]):
+        new_data = np.append(new_data, time_series)
+
+    return new_data.reshape(array2d.shape[1], -1).T
+
 # MAD stuff
 def med_abs_dev(array1d):
     """
@@ -96,7 +214,20 @@ def med_abs_dev(array1d):
     running_med = np.median(array1d)
     abs_dev = np.abs(array1d - running_med)
     mad = np.median(abs_dev)
+    return running_med, abs_dev, mad
+
+def med_abs_dev_1(array1d):
+    """
+        Perform the MAD algorithm on a 1d array,
+        returns a single number denoting the value 
+        of the median absolute deviation
+    """
+
+    running_med = np.median(array1d)
+    abs_dev = np.abs(array1d - running_med)
+    mad = np.median(abs_dev)
     return mad
+
 
 def med_abs_dev_ratio(array1d):
     """
@@ -251,14 +382,10 @@ def replace_mad_two_pass(array2d, threshold=5.0):
 
     plotData(a)
     
-
-def plotData(dataArr):
-    """Do an imshow of the dataArray"""
-    # set up axes
+def plotData(arr):
     left, width = 0.1, 0.65
     bottom, height = 0.1, 0.65
-
-    bottom_h = left_h = left+width+0.02
+    bottom_h = left_h = left + width + 0.02
 
     rect_cmap = [left, bottom, width, height]
     rect_x = [left, bottom_h, width, 0.2]
@@ -273,28 +400,27 @@ def plotData(dataArr):
     ax_x.xaxis.set_major_formatter(NullFormatter())
     ax_y.yaxis.set_major_formatter(NullFormatter())
 
-    # plot stuff
+    # plot
+    vertical_data = arr.mean(axis=1)
+    vertical_md = np.median(arr, axis=1)
+    horiz_data = arr.mean(axis=0)
+    horiz_md = np.median(arr, axis=0)
 
-    vertical_data = dataArr.mean(axis=1)
-    horiz_data = dataArr.mean(axis=0)
-    aspect = float(len(horiz_data))/len(vertical_data)
+    aspect = float(len(horiz_data)) / len(vertical_data)
 
-    axCmap.imshow(dataArr, aspect = aspect, origin='lower')
+    axCmap.imshow(arr, aspect=aspect, origin='lower')
     axCmap.set_ylabel('Frequency Channel')
     axCmap.set_xlabel('Time Sample')
 
-
-    ax_x.plot(horiz_data, 'r-')
-    #ax_x.set_yscale('log')
-    #ax_x.yaxis.set_major_formatter(NullFormatter())
+    ax_x.plot(horiz_data, 'r-', label='mean')
+    ax_x.plot(horiz_md, 'b-', label='median')
     ax_x.set_xlim(0, len(horiz_data))
-    
-    
-    # improvise a rotated axis
-    axis_range = range(len(vertical_data))
-    ax_y.plot(vertical_data, axis_range, 'r-')
+
+    y_ra = range(len(vertical_data))
+    ax_y.plot(vertical_data, y_ra, 'r-')
+    ax_y.plot(vertical_md, y_ra, 'b-')
     #ax_y.xaxis.set_major_formatter(NullFormatter())
-    #ax_y.set_xscale('log')
     ax_y.set_ylim(0, len(vertical_data))
 
+    #axCmap.colorbar()
     plt.show()
