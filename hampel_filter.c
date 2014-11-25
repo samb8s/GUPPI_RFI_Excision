@@ -52,6 +52,7 @@ void hampel_filter_2d(float *inbuffer,
     // loop over channels
     for (i_chan=0; i_chan < nchans; i_chan++){
 
+        if (i_chan%50 == 0) printf("Starting channel loop %d\n", i_chan);
         // set channel range
         i_min = i_chan - window_size_y;
         if (i_min < 0){
@@ -79,6 +80,7 @@ void hampel_filter_2d(float *inbuffer,
 
             
             // calculate median, MAD of the window region
+            //printf("calculating MAD, %d %d", i_chan, j_samp);
             med = median_of_2d(inbuffer, nsamps, i_min, i_max, j_min, j_max);
             mad = mad_of_2d(inbuffer, nsamps, i_min, i_max, j_min, j_max, med);
             mad_scale_est = 1.4826 * mad * threshold;

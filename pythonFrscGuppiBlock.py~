@@ -8,6 +8,9 @@ from ra_analyze import *
 from copy import deepcopy 
 import numpy as np
 
+import robust_stats as rs
+import robust_stats_c as rs_c
+
 def read_guppi_header(header):
 
     loc = header.find("BLOCSIZE")
@@ -105,8 +108,20 @@ def main(infile,outfile):
         chunk = np.delete(chunk, np.s_[-npol*overlap::], 1)
         chunk.shape = (obsnchan,-1,npol)
 
-        # now need to implement the hempel filter stuff on "chunk"
+        #print chunk.shape
+        #sys.exit()
+        xi = chunk[:,:1024,0]; xq = chunk[:,:1024,1]
+        xx = xi.astype(float)*xi.astype(float) + xq.astype(float)*xq.astype(float)
+        #rs.plotData(xx)
+        #print chunk.mean(axis=1), chunk.mean(axis=2)
+        cleaned = rs.hampel_filter_2d(xx, 3.0)
 
+        #cleaned = rs_c.hampel_filter_2d(xx, 3.0)
+        #cleaned = rs.hampel_2d_fast(xx, 3.0)
+        rs.plotData(cleaned)
+
+        # now need to implement the hempel filter stuff on "chunk"
+        
         sys.exit()
 
 # Done with this GUPPI block. Increment locator to end of the block (including overlap)
